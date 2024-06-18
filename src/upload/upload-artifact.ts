@@ -23,55 +23,68 @@ async function deleteArtifactIfExists(artifactName: string): Promise<void> {
 }
 
 export async function run(): Promise<void> {
+
   const inputs = getInputs()
-  const searchResult = await findFilesToUpload(inputs.searchPath)
-  if (searchResult.filesToUpload.length === 0) {
-    // No files were found, different use cases warrant different types of behavior if nothing is found
-    switch (inputs.ifNoFilesFound) {
-      case NoFileOptions.warn: {
-        core.warning(
-          `No files were found with the provided path: ${inputs.searchPath}. No artifacts will be uploaded.`
-        )
-        break
-      }
-      case NoFileOptions.error: {
-        core.setFailed(
-          `No files were found with the provided path: ${inputs.searchPath}. No artifacts will be uploaded.`
-        )
-        break
-      }
-      case NoFileOptions.ignore: {
-        core.info(
-          `No files were found with the provided path: ${inputs.searchPath}. No artifacts will be uploaded.`
-        )
-        break
-      }
+  if (typeof(inputs.artifactName) !== typeof(String)) {
+    for(let i = 0; i < inputs.artifactName.length; i++) {
+      core.info(`Uploading artifact with name: ${inputs.artifactName[i]} in path ${inputs.searchPath[i]}`)
+      await UploadSingleArtifact(inputs.artifactName[i] as string, inputs.searchPath[i] as string)
     }
   } else {
-    const s = searchResult.filesToUpload.length === 1 ? '' : 's'
-    core.info(
-      `With the provided path, there will be ${searchResult.filesToUpload.length} file${s} uploaded`
-    )
-    core.debug(`Root artifact directory is ${searchResult.rootDirectory}`)
+    await UploadSingleArtifact(inputs.artifactName as string, inputs.searchPath as string)
+  }
 
-    if (inputs.overwrite) {
-      await deleteArtifactIfExists(inputs.artifactName)
+  async function UploadSingleArtifact(artifactName: string, searchPath: string) {
+    
+    const searchResult = await findFilesToUpload(searchPath)
+    if (searchResult.filesToUpload.length === 0) {
+      // No files were found, different use cases warrant different types of behavior if nothing is found
+      switch (inputs.ifNoFilesFound) {
+        case NoFileOptions.warn: {
+          core.warning(
+            `No files were found with the provided path: ${searchPath}. No artifacts will be uploaded.`
+          )
+          break
+        }
+        case NoFileOptions.error: {
+          core.setFailed(
+            `No files were found with the provided path: ${searchPath}. No artifacts will be uploaded.`
+          )
+          break
+        }
+        case NoFileOptions.ignore: {
+          core.info(
+            `No files were found with the provided path: ${searchPath}. No artifacts will be uploaded.`
+          )
+          break
+        }
+      }
+    } else {
+      const s = searchResult.filesToUpload.length === 1 ? '' : 's'
+      core.info(
+        `With the provided path, there will be ${searchResult.filesToUpload.length} file${s} uploaded`
+      )
+      core.debug(`Root artifact directory is ${searchResult.rootDirectory}`)
+
+      if (inputs.overwrite) {
+        await deleteArtifactIfExists(artifactName)
+      }
+
+      const options: UploadArtifactOptions = {}
+      if (inputs.retentionDays) {
+        options.retentionDays = inputs.retentionDays
+      }
+
+      if (typeof inputs.compressionLevel !== 'undefined') {
+        options.compressionLevel = inputs.compressionLevel
+      }
+
+      await uploadArtifact(
+        artifactName,
+        searchResult.filesToUpload,
+        searchResult.rootDirectory,
+        options
+      )
     }
-
-    const options: UploadArtifactOptions = {}
-    if (inputs.retentionDays) {
-      options.retentionDays = inputs.retentionDays
-    }
-
-    if (typeof inputs.compressionLevel !== 'undefined') {
-      options.compressionLevel = inputs.compressionLevel
-    }
-
-    await uploadArtifact(
-      inputs.artifactName,
-      searchResult.filesToUpload,
-      searchResult.rootDirectory,
-      options
-    )
   }
 }
